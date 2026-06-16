@@ -1,0 +1,763 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>區網快傳 · LAN Share</title>
+
+<!-- ===== 字型 ===== -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Inter:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+
+<style>
+  /* ============ 設計變數 ============ */
+  :root{
+    --bg:#E8EDF7;          /* 冷調紙面 */
+    --surface:#FFFFFF;
+    --surface-2:#F2F5FC;
+    --ink:#121A2B;         /* 深墨 */
+    --muted:#5C6B86;
+    --line:#D7DFEE;
+    --send:#2F5BFF;        /* 點對點傳送：冷藍 */
+    --send-soft:#E5EBFF;
+    --cast:#FF5630;        /* 廣播：暖橘（最醒目的動作） */
+    --cast-soft:#FFE6DF;
+    --ok:#12A56A;
+    --warn:#D98A00;
+    --err:#E03b3b;
+    --radius:16px;
+    --shadow:0 1px 2px rgba(18,26,43,.06), 0 8px 24px rgba(18,26,43,.06);
+    --display:"Bricolage Grotesque", system-ui, sans-serif;
+    --body:"Inter", system-ui, sans-serif;
+    --mono:"Space Mono", ui-monospace, monospace;
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:var(--body);
+    color:var(--ink);
+    background:
+      radial-gradient(900px 500px at 85% -10%, #DCE6FF 0%, transparent 60%),
+      radial-gradient(700px 500px at -10% 110%, #FFE9E2 0%, transparent 55%),
+      var(--bg);
+    min-height:100vh;
+    line-height:1.5;
+    -webkit-text-size-adjust:100%;
+  }
+  .wrap{max-width:940px; margin:0 auto; padding:22px 18px 60px}
+
+  /* ============ Header ============ */
+  header.top{display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:18px}
+  .brand{display:flex; align-items:center; gap:12px}
+  .logo{
+    width:42px;height:42px;border-radius:12px;flex:none;
+    background:linear-gradient(135deg,var(--send),#7C4DFF);
+    display:grid;place-items:center;color:#fff;
+    box-shadow:var(--shadow);
+  }
+  .logo svg{width:22px;height:22px}
+  h1{font-family:var(--display); font-weight:800; font-size:22px; margin:0; letter-spacing:-.01em}
+  .brand p{margin:2px 0 0; font-size:12.5px; color:var(--muted)}
+
+  .status{
+    margin-left:auto; display:flex; align-items:center; gap:8px;
+    font-size:13px; font-weight:600; color:var(--muted);
+    background:var(--surface); border:1px solid var(--line);
+    padding:7px 12px; border-radius:999px; box-shadow:var(--shadow);
+  }
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--muted);flex:none}
+  .status.online .dot{background:var(--ok); box-shadow:0 0 0 0 rgba(18,165,106,.55); animation:pulse 1.8s infinite}
+  .status.online{color:var(--ink)}
+  .status.warn .dot{background:var(--warn)}
+  .status.err .dot{background:var(--err)}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(18,165,106,.5)}70%{box-shadow:0 0 0 9px rgba(18,165,106,0)}100%{box-shadow:0 0 0 0 rgba(18,165,106,0)}}
+
+  /* ============ 加入房間 ============ */
+  .panel{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow)}
+  .join{padding:18px; margin-bottom:18px}
+  .join h2{font-family:var(--display); font-size:15px; margin:0 0 4px}
+  .join .hint{font-size:12.5px; color:var(--muted); margin:0 0 14px}
+  .fields{display:grid; grid-template-columns:1fr 1fr auto; gap:10px}
+  @media(max-width:560px){.fields{grid-template-columns:1fr}}
+  label.f{display:flex; flex-direction:column; gap:5px; font-size:12px; font-weight:600; color:var(--muted)}
+  input[type=text]{
+    font:inherit; font-size:15px; color:var(--ink);
+    padding:11px 13px; border:1.5px solid var(--line); border-radius:11px; background:var(--surface-2);
+    transition:border-color .15s, background .15s;
+  }
+  input[type=text]:focus{outline:none; border-color:var(--send); background:#fff}
+  #room{font-family:var(--mono); text-transform:uppercase; letter-spacing:2px}
+  .btn{
+    font:inherit; font-weight:700; font-size:14.5px; cursor:pointer;
+    border:none; border-radius:11px; padding:12px 20px; color:#fff;
+    background:var(--send); transition:transform .08s, filter .15s; align-self:end;
+  }
+  .btn:hover{filter:brightness(1.06)} .btn:active{transform:translateY(1px)}
+  .btn[disabled]{opacity:.5; cursor:not-allowed}
+  .btn.ghost{background:var(--surface-2); color:var(--ink); border:1.5px solid var(--line)}
+
+  /* 已連線後的房間列 */
+  .roombar{display:none; align-items:center; gap:12px; flex-wrap:wrap; padding:14px 16px; margin-bottom:18px}
+  .roombar.show{display:flex}
+  .roombar .meta{font-size:13px; color:var(--muted)}
+  .code-chip{
+    font-family:var(--mono); font-weight:700; font-size:18px; letter-spacing:3px;
+    background:var(--send-soft); color:var(--send); padding:6px 14px; border-radius:10px;
+  }
+  .me{font-size:13px; color:var(--muted); margin-left:auto}
+  .me b{color:var(--ink)}
+
+  /* ============ 廣播區（signature） ============ */
+  .cast{padding:20px; margin-bottom:18px; position:relative; overflow:hidden; display:none}
+  .cast.show{display:block}
+  .cast::before{
+    content:""; position:absolute; inset:0;
+    background:radial-gradient(120% 140% at 18% 0%, var(--cast-soft) 0%, transparent 55%);
+    pointer-events:none;
+  }
+  .cast-head{display:flex; align-items:center; gap:12px; position:relative}
+  .cast-ico{
+    width:46px;height:46px;border-radius:13px;flex:none;display:grid;place-items:center;
+    background:var(--cast); color:#fff; position:relative;
+  }
+  .cast-ico svg{width:24px;height:24px;position:relative;z-index:1}
+  .cast-ico::after{
+    content:"";position:absolute;inset:0;border-radius:13px;border:2px solid var(--cast);
+    animation:ripple 2.4s ease-out infinite; opacity:0;
+  }
+  @keyframes ripple{0%{transform:scale(1);opacity:.7}100%{transform:scale(1.7);opacity:0}}
+  .cast-head h2{font-family:var(--display); font-size:17px; margin:0}
+  .cast-head p{margin:2px 0 0; font-size:12.5px; color:var(--muted)}
+  .drop{
+    margin-top:14px; border:2px dashed var(--line); border-radius:13px;
+    padding:22px; text-align:center; color:var(--muted); font-size:13.5px;
+    cursor:pointer; transition:border-color .15s, background .15s; position:relative;
+  }
+  .drop:hover{border-color:var(--cast); background:var(--cast-soft)}
+  .drop.over{border-color:var(--cast); background:var(--cast-soft); color:var(--ink)}
+  .drop b{color:var(--ink)}
+
+  /* ============ 裝置區 ============ */
+  section.devices{display:none; margin-bottom:18px}
+  section.devices.show{display:block}
+  .sec-label{
+    display:flex; align-items:baseline; gap:8px; margin:0 2px 11px;
+    font-family:var(--display); font-weight:700; font-size:13px; letter-spacing:.04em; text-transform:uppercase; color:var(--muted);
+  }
+  .sec-label .n{font-family:var(--mono); color:var(--ink)}
+  .grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(168px,1fr)); gap:12px}
+  .device{
+    background:var(--surface); border:1.5px solid var(--line); border-radius:14px; padding:16px 14px;
+    text-align:center; cursor:pointer; transition:border-color .15s, transform .08s, box-shadow .15s;
+    box-shadow:var(--shadow); position:relative;
+  }
+  .device:hover{border-color:var(--send); transform:translateY(-2px)}
+  .device.over{border-color:var(--send); background:var(--send-soft)}
+  .avatar{
+    width:52px;height:52px;border-radius:50%;margin:0 auto 10px;display:grid;place-items:center;
+    color:#fff; font-family:var(--display); font-weight:800; font-size:20px; position:relative;
+  }
+  .avatar::after{content:"";position:absolute;inset:-5px;border-radius:50%;border:2px solid currentColor;opacity:.18}
+  .device .name{font-weight:600; font-size:14.5px; word-break:break-word}
+  .device .sub{font-size:11.5px; color:var(--muted); margin-top:3px}
+  .empty{
+    grid-column:1/-1; text-align:center; color:var(--muted); font-size:13.5px;
+    padding:30px 16px; border:1.5px dashed var(--line); border-radius:14px; background:var(--surface-2);
+  }
+
+  /* ============ 傳輸清單 ============ */
+  section.xfers{display:none}
+  section.xfers.show{display:block}
+  .xfer{
+    background:var(--surface); border:1px solid var(--line); border-radius:13px; padding:13px 15px;
+    margin-bottom:10px; box-shadow:var(--shadow); display:flex; gap:13px; align-items:center;
+  }
+  .xfer .ic{width:34px;height:34px;border-radius:9px;flex:none;display:grid;place-items:center;color:#fff;font-size:15px}
+  .xfer.in .ic{background:var(--ok)} .xfer.out .ic{background:var(--send)} .xfer.cast .ic{background:var(--cast)}
+  .xfer .body{flex:1; min-width:0}
+  .xfer .fn{font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .xfer .det{font-size:11.5px; color:var(--muted); margin-top:2px; display:flex; gap:7px}
+  .bar{height:6px; border-radius:99px; background:var(--surface-2); margin-top:8px; overflow:hidden}
+  .bar > i{display:block; height:100%; width:0; border-radius:99px; background:var(--send); transition:width .12s linear}
+  .xfer.in .bar>i{background:var(--ok)} .xfer.cast .bar>i{background:var(--cast)}
+  .dl{
+    font:inherit; font-weight:700; font-size:13px; text-decoration:none; flex:none;
+    background:var(--ok); color:#fff; padding:8px 14px; border-radius:9px;
+  }
+  .dl:hover{filter:brightness(1.05)}
+  .pct{font-family:var(--mono); font-size:11.5px; color:var(--muted); flex:none}
+
+  footer{margin-top:26px; text-align:center; font-size:11.5px; color:var(--muted); line-height:1.7}
+  footer code{font-family:var(--mono); background:var(--surface-2); padding:1px 6px; border-radius:5px}
+
+  /* toast */
+  #toast{
+    position:fixed; left:50%; bottom:22px; transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:#fff; padding:11px 18px; border-radius:11px; font-size:13.5px; font-weight:500;
+    opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; z-index:50; max-width:90vw;
+  }
+  #toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+
+  @media (prefers-reduced-motion: reduce){
+    *{animation:none !important; transition:none !important}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <div class="logo" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>
+      </div>
+      <div>
+        <h1>區網快傳</h1>
+        <p>同一網路內跨平台互傳檔案 · 支援一鍵廣播</p>
+      </div>
+    </div>
+    <div class="status" id="status"><span class="dot"></span><span id="statusText">尚未連線</span></div>
+  </header>
+
+  <!-- 加入房間 -->
+  <div class="panel join" id="joinPanel">
+    <h2>建立或加入房間</h2>
+    <p class="hint">在同一個網路的每台裝置上開啟本頁、輸入<b>相同的房號</b>即可互相看見。房號留空會自動產生一組。</p>
+    <div class="fields">
+      <label class="f">你的名稱
+        <input type="text" id="name" placeholder="例如：小明的手機" maxlength="24" autocomplete="off">
+      </label>
+      <label class="f">房號
+        <input type="text" id="room" placeholder="自動產生" maxlength="8" autocomplete="off">
+      </label>
+      <button class="btn" id="joinBtn">加入</button>
+    </div>
+  </div>
+
+  <!-- 已連線：房間資訊列 -->
+  <div class="panel roombar" id="roombar">
+    <span class="meta">房號</span>
+    <span class="code-chip" id="roomChip">----</span>
+    <button class="btn ghost" id="copyBtn" style="padding:8px 14px;font-size:13px">複製</button>
+    <span class="me">你是 <b id="meName">—</b></span>
+  </div>
+
+  <!-- 廣播區 -->
+  <div class="panel cast" id="castPanel">
+    <div class="cast-head">
+      <div class="cast-ico" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.4"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.4"/><path d="M19.1 4.9C23 8.8 23 15.2 19.1 19.1"/></svg>
+      </div>
+      <div>
+        <h2>廣播給所有人</h2>
+        <p>把同一份檔案一次送到房間內每一台裝置。</p>
+      </div>
+    </div>
+    <div class="drop" id="castDrop">
+      <b>拖放檔案到這裡</b>，或點一下選擇檔案
+      <input type="file" id="castInput" multiple hidden>
+    </div>
+  </div>
+
+  <!-- 裝置清單 -->
+  <section class="devices" id="devicesSec">
+    <div class="sec-label">線上裝置 <span class="n" id="devCount">0</span></div>
+    <div class="grid" id="deviceGrid"></div>
+  </section>
+
+  <!-- 傳輸清單 -->
+  <section class="xfers" id="xferSec">
+    <div class="sec-label">傳輸紀錄</div>
+    <div id="xferList"></div>
+  </section>
+
+  <footer>
+    握手透過 PeerJS 公用訊號伺服器，檔案資料以 WebRTC 點對點直連傳輸；同網段時資料留在區網內。<br>
+    需在 <code>https</code> 環境下執行。要自架訊號伺服器或加入 TURN，請修改檔案開頭的 <code>SIGNAL</code> / <code>PEER_CONFIG</code>。
+  </footer>
+</div>
+
+<div id="toast"></div>
+
+<!-- PeerJS -->
+<script src="https://cdn.jsdelivr.net/npm/peerjs@1.5/dist/peerjs.min.js"></script>
+<script>
+  // PeerJS 載入失敗時的備援來源
+  if (typeof window.Peer === 'undefined') {
+    document.write('<script src="https://unpkg.com/peerjs@1.5/dist/peerjs.min.js"><\/script>');
+  }
+</script>
+
+<script>
+"use strict";
+/* ====================================================================
+   設定區
+   ==================================================================== */
+
+// 訊號伺服器：留空 = 使用 PeerJS 公用雲端伺服器（免設定）。
+// 自架請填：{ host:'your.host', port:443, path:'/myapp', secure:true }
+const SIGNAL = {};
+
+// ICE 伺服器：同網段只需 STUN。跨網段（不同網路）建議加入自己的 TURN。
+const PEER_CONFIG = {
+  iceServers: [
+    { urls: 'stun:stun.l.google.com:19302' },
+    { urls: 'stun:stun1.l.google.com:19302' }
+    // 跨網段需求可加入 TURN：
+    // { urls:'turn:your.turn.server:3478', username:'user', credential:'pass' }
+  ]
+};
+
+const CHUNK = 64 * 1024;            // 每塊 64KB
+const HIGH_WATER = 8 * 1024 * 1024; // 緩衝超過 8MB 時暫停送出
+const LOW_WATER  = 2 * 1024 * 1024;
+
+/* ====================================================================
+   狀態
+   ==================================================================== */
+const state = {
+  peer: null,
+  myId: null,
+  myName: '',
+  room: '',
+  hubId: '',
+  role: null,            // 'hub' | 'client'
+  hubConn: null,         // client 連到 hub 的連線
+  conns: new Map(),      // peerId -> DataConnection
+  roster: new Map(),     // peerId -> {id, name}
+  transfers: new Map(),  // transferId -> 傳輸物件
+};
+
+/* ====================================================================
+   DOM
+   ==================================================================== */
+const $ = (id) => document.getElementById(id);
+const els = {
+  status:$('status'), statusText:$('statusText'),
+  joinPanel:$('joinPanel'), name:$('name'), room:$('room'), joinBtn:$('joinBtn'),
+  roombar:$('roombar'), roomChip:$('roomChip'), copyBtn:$('copyBtn'), meName:$('meName'),
+  castPanel:$('castPanel'), castDrop:$('castDrop'), castInput:$('castInput'),
+  devicesSec:$('devicesSec'), deviceGrid:$('deviceGrid'), devCount:$('devCount'),
+  xferSec:$('xferSec'), xferList:$('xferList'),
+  toast:$('toast'),
+};
+
+/* ====================================================================
+   工具
+   ==================================================================== */
+const ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+function genRoom(){ let s=''; for(let i=0;i<4;i++) s+=ALPHABET[Math.floor(Math.random()*ALPHABET.length)]; return s; }
+function uid(){ return Math.random().toString(36).slice(2,9); }
+function isBinary(d){ return d instanceof ArrayBuffer || ArrayBuffer.isView(d); }
+function byteLen(d){ return d instanceof ArrayBuffer ? d.byteLength : d.byteLength; }
+function fmtBytes(n){
+  if(n < 1024) return n + ' B';
+  if(n < 1048576) return (n/1024).toFixed(1) + ' KB';
+  if(n < 1073741824) return (n/1048576).toFixed(1) + ' MB';
+  return (n/1073741824).toFixed(2) + ' GB';
+}
+function nameOf(id){ const p = state.roster.get(id); return p ? p.name : id.slice(0,6); }
+function colorFor(str){
+  let h=0; for(let i=0;i<str.length;i++) h=(h*31+str.charCodeAt(i))%360;
+  return `hsl(${h} 62% 52%)`;
+}
+function initials(str){ return (str.trim()[0] || '?').toUpperCase(); }
+let toastTimer;
+function toast(msg){
+  els.toast.textContent = msg; els.toast.classList.add('show');
+  clearTimeout(toastTimer); toastTimer = setTimeout(()=>els.toast.classList.remove('show'), 2600);
+}
+function setStatus(text, cls){
+  els.statusText.textContent = text;
+  els.status.className = 'status' + (cls ? ' '+cls : '');
+}
+
+/* ====================================================================
+   連線建立
+   ==================================================================== */
+function peerOpts(){ return Object.assign({ debug: 1, config: PEER_CONFIG }, SIGNAL); }
+
+function joinRoom(room, name, isRejoin){
+  // 清掉舊連線
+  if(state.peer){ try{ state.peer.destroy(); }catch(_){} }
+  state.conns.clear(); state.roster.clear();
+  state.hubConn = null; state.role = null;
+
+  state.room = room;
+  state.myName = name;
+  state.hubId = 'lanshare-' + room + '-hub';
+
+  if(!isRejoin){
+    els.joinPanel.style.display = 'none';
+    els.roombar.classList.add('show');
+    els.castPanel.classList.add('show');
+    els.devicesSec.classList.add('show');
+    els.roomChip.textContent = room;
+    els.meName.textContent = name;
+  }
+  setStatus('連線中…', 'warn');
+  tryBecomeHub();
+}
+
+// 先嘗試「成為協調者(hub)」，搶不到代表房間已存在 → 改當 client
+function tryBecomeHub(){
+  const p = new Peer(state.hubId, peerOpts());
+  state.peer = p;
+  let decided = false;
+
+  p.on('open', (id) => {
+    if(decided) return; decided = true;
+    state.role = 'hub'; state.myId = id;
+    state.roster.set(id, { id, name: state.myName });
+    attachPeer(p);
+    setStatus('已連線（協調裝置）', 'online');
+    renderDevices();
+  });
+
+  p.on('error', (err) => {
+    if(err.type === 'unavailable-id' && !decided){
+      decided = true;
+      try{ p.destroy(); }catch(_){}
+      becomeClient();
+      return;
+    }
+    handlePeerError(err);
+  });
+}
+
+function becomeClient(){
+  const p = new Peer(undefined, peerOpts());
+  state.peer = p; state.role = 'client';
+  p.on('open', (id) => {
+    state.myId = id;
+    attachPeer(p);
+    connectToHub();
+  });
+  p.on('error', handlePeerError);
+}
+
+function connectToHub(){
+  const conn = state.peer.connect(state.hubId, { reliable:true, metadata:{ name: state.myName } });
+  state.hubConn = conn;
+  state.conns.set(state.hubId, conn);
+  wireConn(conn);
+  conn.on('open', () => setStatus('已連線', 'online'));
+}
+
+// peer 的通用事件
+function attachPeer(p){
+  p.on('connection', (conn) => {
+    wireConn(conn);
+    conn.on('open', () => {
+      state.conns.set(conn.peer, conn);
+      if(state.role === 'hub'){
+        state.roster.set(conn.peer, { id: conn.peer, name: (conn.metadata && conn.metadata.name) || '裝置' });
+        broadcastRoster();
+        renderDevices();
+        toast(nameOf(conn.peer) + ' 已加入');
+      }
+    });
+  });
+  p.on('disconnected', () => { try{ p.reconnect(); }catch(_){} });
+  p.on('error', handlePeerError);
+}
+
+function handlePeerError(err){
+  console.warn('[peer error]', err.type, err.message || '');
+  switch(err.type){
+    case 'peer-unavailable':
+      // 想連的對象不在線。若是 hub 不見了而我是 client → 嘗試重新加入（可能改當 hub）
+      if(state.role === 'client' && (!state.hubConn || !state.hubConn.open)){
+        setStatus('協調裝置已離線，重新連線中…', 'warn');
+        setTimeout(() => joinRoom(state.room, state.myName, true), 1500);
+      } else {
+        toast('對方似乎已離線');
+      }
+      break;
+    case 'network': case 'server-error': case 'socket-error': case 'socket-closed':
+      setStatus('與伺服器連線中斷，重試中…', 'warn');
+      break;
+    case 'browser-incompatible':
+      setStatus('此瀏覽器不支援 WebRTC', 'err');
+      toast('請改用較新的 Chrome / Edge / Firefox / Safari');
+      break;
+    default:
+      setStatus('連線發生問題', 'err');
+  }
+}
+
+// 為一條連線掛上資料 / 關閉處理
+function wireConn(conn){
+  conn.on('data', (data) => handleData(conn, data));
+  conn.on('close', () => {
+    state.conns.delete(conn.peer);
+    if(state.role === 'hub' && state.roster.has(conn.peer)){
+      const gone = nameOf(conn.peer);
+      state.roster.delete(conn.peer);
+      broadcastRoster();
+      renderDevices();
+      toast(gone + ' 已離開');
+    }
+    if(conn === state.hubConn){
+      setStatus('協調裝置已離線，重新連線中…', 'warn');
+      setTimeout(() => joinRoom(state.room, state.myName, true), 1500);
+    }
+  });
+}
+
+// hub 把最新名單推送給所有 client
+function broadcastRoster(){
+  const peers = Array.from(state.roster.values());
+  const msg = { type:'roster', peers };
+  for(const [id, conn] of state.conns){
+    if(id !== state.hubId && conn.open){ try{ conn.send(msg); }catch(_){} }
+  }
+}
+
+/* ====================================================================
+   收訊息
+   ==================================================================== */
+function handleData(conn, data){
+  if(isBinary(data)){ receiveChunk(conn, data); return; }
+  if(!data || typeof data !== 'object') return;
+  switch(data.type){
+    case 'roster':
+      state.roster = new Map(data.peers.map(p => [p.id, p]));
+      renderDevices();
+      break;
+    case 'file-start': beginReceive(conn, data); break;
+    case 'file-end':   endReceive(conn, data);   break;
+  }
+}
+
+function beginReceive(conn, meta){
+  const from = (conn.metadata && conn.metadata.name) || nameOf(conn.peer);
+  conn._incoming = { id: meta.transferId, name: meta.name, size: meta.size, mime: meta.mime, parts: [], received: 0 };
+  const t = { id: meta.transferId, dir:'in', name: meta.name, size: meta.size, received: 0, status:'receiving', peerName: from };
+  state.transfers.set(t.id, t);
+  addXferRow(t);
+}
+
+function receiveChunk(conn, chunk){
+  const inc = conn._incoming;
+  if(!inc) return;
+  inc.parts.push(chunk);
+  inc.received += byteLen(chunk);
+  const t = state.transfers.get(inc.id);
+  if(t){ t.received = inc.received; updateXferRow(t); }
+}
+
+function endReceive(conn, msg){
+  const inc = conn._incoming;
+  if(!inc || inc.id !== msg.transferId) return;
+  const blob = new Blob(inc.parts, { type: inc.mime || 'application/octet-stream' });
+  const url = URL.createObjectURL(blob);
+  const t = state.transfers.get(inc.id);
+  if(t){ t.status = 'done'; t.received = inc.size; t.url = url; updateXferRow(t); }
+  conn._incoming = null;
+  toast('收到檔案：' + msg.name);
+}
+
+/* ====================================================================
+   送檔
+   ==================================================================== */
+function ensureConn(peerId){
+  return new Promise((resolve, reject) => {
+    const existing = state.conns.get(peerId);
+    if(existing && existing.open){ resolve(existing); return; }
+    const conn = state.peer.connect(peerId, { reliable:true, metadata:{ name: state.myName } });
+    let done = false;
+    wireConn(conn);
+    conn.on('open', () => { done = true; state.conns.set(peerId, conn); resolve(conn); });
+    conn.on('error', (e) => { if(!done) reject(e); });
+    setTimeout(() => { if(!done) reject(new Error('connection-timeout')); }, 12000);
+  });
+}
+
+function drain(dc){
+  return new Promise((res) => {
+    const i = setInterval(() => { if(!dc || dc.bufferedAmount < LOW_WATER){ clearInterval(i); res(); } }, 40);
+  });
+}
+
+async function sendFileToPeer(peerId, file, opts){
+  opts = opts || {};
+  let conn;
+  try{ conn = await ensureConn(peerId); }
+  catch(e){ toast('無法連到 ' + nameOf(peerId)); throw e; }
+
+  const transferId = uid();
+  const t = { id: transferId, dir: opts.cast ? 'cast' : 'out', name: file.name, size: file.size,
+              sent: 0, status:'sending', peerName: nameOf(peerId) };
+  state.transfers.set(transferId, t);
+  addXferRow(t);
+
+  conn.send({ type:'file-start', transferId, name:file.name, size:file.size, mime:file.type });
+
+  const dc = conn.dataChannel;
+  let offset = 0;
+  while(offset < file.size){
+    if(dc && dc.bufferedAmount > HIGH_WATER) await drain(dc);
+    const buf = await file.slice(offset, offset + CHUNK).arrayBuffer();
+    conn.send(buf);
+    offset += buf.byteLength;
+    t.sent = offset; updateXferRow(t);
+  }
+  conn.send({ type:'file-end', transferId });
+  t.status = 'done'; updateXferRow(t);
+}
+
+async function sendFilesToPeer(peerId, files){
+  for(const f of files){
+    try{ await sendFileToPeer(peerId, f); }catch(_){}
+  }
+}
+
+async function broadcastFiles(files){
+  const targets = Array.from(state.roster.values()).filter(p => p.id !== state.myId);
+  if(!targets.length){ toast('目前沒有其他裝置在線'); return; }
+  for(const f of files){
+    for(const tg of targets){
+      try{ await sendFileToPeer(tg.id, f, { cast:true }); }catch(_){}
+    }
+  }
+  toast('已廣播 ' + files.length + ' 個檔案給 ' + targets.length + ' 台裝置');
+}
+
+/* ====================================================================
+   畫面渲染
+   ==================================================================== */
+function renderDevices(){
+  const peers = Array.from(state.roster.values()).filter(p => p.id !== state.myId);
+  els.devCount.textContent = peers.length;
+  els.deviceGrid.innerHTML = '';
+
+  if(!peers.length){
+    const e = document.createElement('div');
+    e.className = 'empty';
+    e.textContent = '還沒有其他裝置。在另一台裝置開啟本頁、輸入相同房號即可出現在這裡。';
+    els.deviceGrid.appendChild(e);
+    return;
+  }
+  for(const p of peers){
+    const card = document.createElement('div');
+    card.className = 'device';
+    card.tabIndex = 0;
+    card.innerHTML =
+      `<div class="avatar" style="background:${colorFor(p.id)}">${initials(p.name)}</div>` +
+      `<div class="name"></div><div class="sub">點一下傳送 · 或拖放</div>`;
+    card.querySelector('.name').textContent = p.name;
+
+    const pick = () => {
+      const inp = document.createElement('input');
+      inp.type = 'file'; inp.multiple = true; inp.hidden = true;
+      inp.onchange = () => { if(inp.files.length) sendFilesToPeer(p.id, inp.files); };
+      document.body.appendChild(inp); inp.click();
+      setTimeout(() => inp.remove(), 1000);
+    };
+    card.addEventListener('click', pick);
+    card.addEventListener('keydown', (e) => { if(e.key==='Enter'||e.key===' '){ e.preventDefault(); pick(); } });
+
+    // 拖放到單一裝置
+    card.addEventListener('dragover', (e) => { e.preventDefault(); card.classList.add('over'); });
+    card.addEventListener('dragleave', () => card.classList.remove('over'));
+    card.addEventListener('drop', (e) => {
+      e.preventDefault(); card.classList.remove('over');
+      if(e.dataTransfer.files.length) sendFilesToPeer(p.id, e.dataTransfer.files);
+    });
+
+    els.deviceGrid.appendChild(card);
+  }
+}
+
+const xferEls = new Map(); // transferId -> {root, bar, pct, det, dlSlot}
+function ensureXferSecVisible(){ els.xferSec.classList.add('show'); }
+
+function addXferRow(t){
+  ensureXferSecVisible();
+  const root = document.createElement('div');
+  root.className = 'xfer ' + t.dir;
+  const icon = t.dir === 'in' ? '↓' : (t.dir === 'cast' ? '◎' : '↑');
+  root.innerHTML =
+    `<div class="ic">${icon}</div>` +
+    `<div class="body">` +
+      `<div class="fn"></div>` +
+      `<div class="det"></div>` +
+      `<div class="bar"><i></i></div>` +
+    `</div>` +
+    `<span class="pct">0%</span>`;
+  root.querySelector('.fn').textContent = t.name;
+  els.xferList.prepend(root);
+  xferEls.set(t.id, {
+    root,
+    bar: root.querySelector('.bar > i'),
+    pct: root.querySelector('.pct'),
+    det: root.querySelector('.det'),
+  });
+  updateXferRow(t);
+}
+
+function updateXferRow(t){
+  const el = xferEls.get(t.id);
+  if(!el) return;
+  const moved = t.dir === 'in' ? t.received : t.sent;
+  const ratio = t.size ? Math.min(1, moved / t.size) : (t.status==='done'?1:0);
+  el.bar.style.width = (ratio*100).toFixed(1) + '%';
+
+  const verb = t.dir === 'in' ? `來自 ${t.peerName}` : (t.dir==='cast' ? `廣播 → ${t.peerName}` : `傳給 ${t.peerName}`);
+  el.det.textContent = `${verb} · ${fmtBytes(moved)} / ${fmtBytes(t.size)}`;
+
+  if(t.status === 'done'){
+    el.pct.textContent = '完成';
+    el.pct.style.color = 'var(--ok)';
+    if(t.dir === 'in' && t.url && !el.dl){
+      el.pct.style.display = 'none';
+      const a = document.createElement('a');
+      a.className = 'dl'; a.href = t.url; a.download = t.name; a.textContent = '下載';
+      el.root.appendChild(a); el.dl = a;
+    }
+  } else {
+    el.pct.textContent = (ratio*100).toFixed(0) + '%';
+  }
+}
+
+/* ====================================================================
+   事件綁定
+   ==================================================================== */
+els.joinBtn.addEventListener('click', () => {
+  let name = els.name.value.trim();
+  let room = els.room.value.trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+  if(!name){ name = '裝置-' + uid().slice(0,4); }
+  if(!room){ room = genRoom(); }
+  joinRoom(room, name, false);
+});
+els.room.addEventListener('keydown', (e)=>{ if(e.key==='Enter') els.joinBtn.click(); });
+els.name.addEventListener('keydown', (e)=>{ if(e.key==='Enter') els.joinBtn.click(); });
+
+els.copyBtn.addEventListener('click', async () => {
+  try{ await navigator.clipboard.writeText(state.room); toast('已複製房號 ' + state.room); }
+  catch(_){ toast('房號：' + state.room); }
+});
+
+// 廣播拖放區
+els.castDrop.addEventListener('click', () => els.castInput.click());
+els.castInput.addEventListener('change', () => { if(els.castInput.files.length){ broadcastFiles(els.castInput.files); els.castInput.value=''; } });
+els.castDrop.addEventListener('dragover', (e)=>{ e.preventDefault(); els.castDrop.classList.add('over'); });
+els.castDrop.addEventListener('dragleave', ()=> els.castDrop.classList.remove('over'));
+els.castDrop.addEventListener('drop', (e)=>{
+  e.preventDefault(); els.castDrop.classList.remove('over');
+  if(e.dataTransfer.files.length) broadcastFiles(e.dataTransfer.files);
+});
+
+// 預設帶入一組建議房號
+els.room.placeholder = genRoom();
+
+// 安全環境提醒
+if(!window.isSecureContext){
+  setStatus('需在 https 環境執行', 'err');
+}
+</script>
+</body>
+</html>
